@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>XAU/USD M1 Candlestick Chart</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* Theme tokens + Bootstrap overrides */
+:root{--bg:#f3efe6;--panel:#fffdf8;--ink:#1d2733;--mut:#6b7684;--line:#ddd6c6;--gold:#b8860b;--up:#14877b;--dn:#cf4a38;--grid:#ece6d8;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1620;--panel:#152230;--ink:#e8ecf1;--mut:#8fa0b2;--line:#25364a;--gold:#e0b04a;--up:#3fb6a8;--dn:#e5604d;--grid:#1c2c3d}}
+:root[data-theme="dark"]{--bg:#0e1620;--panel:#152230;--ink:#e8ecf1;--mut:#8fa0b2;--line:#25364a;--gold:#e0b04a;--up:#3fb6a8;--dn:#e5604d;--grid:#1c2c3d}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Manrope,system-ui,sans-serif;font-size:14px}
+.container-fluid{max-width:1280px}
+.row>*{margin-bottom:12px}
+.card{--bs-card-bg:var(--panel);--bs-card-border-color:var(--line);--bs-card-color:var(--ink);color:var(--ink);border-radius:6px}
+.btn{font:600 13px Manrope,sans-serif;--bs-btn-color:var(--ink);--bs-btn-border-color:var(--line);--bs-btn-bg:var(--panel);--bs-btn-hover-bg:var(--panel);--bs-btn-hover-color:var(--ink);--bs-btn-hover-border-color:var(--gold)}
+.btn.active,.btn.active:hover{background:var(--gold);border-color:var(--gold);color:#fff}
+.form-select{width:auto;font:600 13px Manrope,sans-serif;background-color:var(--panel);color:var(--ink);border-color:var(--line)}
+.badge{background:transparent;color:var(--mut);font-weight:600;border:1px solid var(--line)}
+/* app */
+h1{font-size:22px;font-weight:800;margin:0;letter-spacing:-.01em}
+.sym{color:var(--gold)}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+.price{font-size:34px;font-weight:600;line-height:1}
+.up{color:var(--up)}.dn{color:var(--dn)}
+.lbl{color:var(--mut);font-size:12px}
+.stat{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--grid)}.stat:last-child{border:0}
+#wrap{position:relative;height:min(62vh,560px);min-height:340px}
+canvas{display:block;width:100%;height:100%;cursor:crosshair;touch-action:pan-y}
+.live{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--up);margin-right:6px}
+.paused .live{background:var(--mut)}
+header{padding:16px 0 10px}
+</style>
+</head>
+<body>
+<div class="container-fluid">
+  <header class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+    <div>
+      <h1><span class="sym">XAU/USD</span> Gold, 1-minute candles</h1>
+      <span class="lbl">Simulated price feed for chart practice, not live market data</span>
+    </div>
+    <span class="badge rounded-pill" id="status"><span class="live"></span><span id="stxt">Running</span></span>
+  </header>
+
+  <div class="row">
+    <div class="col-12 col-md-9">
+      <div class="card">
+        <div class="card-body d-flex flex-wrap align-items-center gap-2" style="border-bottom:1px solid var(--line)">
+          <div class="btn-group" role="group" aria-label="Speed">
+            <button class="btn btn-outline-secondary active" data-sp="1">Real time</button>
+            <button class="btn btn-outline-secondary" data-sp="15">15x</button>
+            <button class="btn btn-outline-secondary" data-sp="60">60x</button>
+          </div>
+          <button class="btn btn-outline-secondary" id="pause">Pause</button>
+          <button class="btn btn-outline-secondary" id="sma">SMA 20</button>
+          <button class="btn btn-outline-secondary" id="vol">Volume</button>
+          <select class="form-select" id="theme" aria-label="Theme"><option value="auto">Theme: auto</option><option value="light">Light</option><option value="dark">Dark</option></select>
+          <span class="lbl ms-auto">Drag to pan, scroll to zoom</span>
+        </div>
+        <div id="wrap"><canvas id="cv" aria-label="XAU/USD M1 candlestick chart"></canvas></div>
+      </div>
+    </div>
+    <div class="col-12 col-md-3">
+      <div class="card"><div class="card-body">
+        <div class="lbl">Last price</div>
+        <div class="price mono" id="px">0.00</div>
+        <div class="mono" id="chg" style="margin:6px 0 12px">0.00 (0.00%)</div>
+        <div class="stat"><span class="lbl" id="hl">Current candle</span><span class="mono" id="ts">--</span></div>
+        <div class="stat"><span class="lbl">Open</span><span class="mono" id="o">--</span></div>
+        <div class="stat"><span class="lbl">High</span><span class="mono" id="h">--</span></div>
+        <div class="stat"><span class="lbl">Low</span><span class="mono" id="l">--</span></div>
+        <div class="stat"><span class="lbl">Close</span><span class="mono" id="c">--</span></div>
+        <div class="stat"><span class="lbl">Ticks</span><span class="mono" id="v">--</span></div>
+        <div class="lbl" style="margin-top:10px">Hover or tap a candle to inspect it. Move off the chart to follow the live candle.</div>
+      </div></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+(function(){
+var cv=document.getElementById('cv'),ctx=cv.getContext('2d'),wrap=document.getElementById('wrap');
+var candles=[],speed=1,paused=false,showSMA=false,showVol=true,cw=9,offset=0,hover=null,drag=null;
+var vt=Math.floor(Date.now()/60000)*60000+Date.now()%60000, price=4050+Math.random()*20, vol=0.35;
+var $=function(i){return document.getElementById(i)};
+function rnd(){var u=Math.random()||1e-9,v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)}
+function tick(){
+  price+=rnd()*vol+(Math.random()<0.02?rnd()*1.5:0);
+  var t=Math.floor(vt/60000)*60000,k=candles[candles.length-1];
+  if(!k||k.t!==t){candles.push(k={t:t,o:price,h:price,l:price,c:price,v:0});if(candles.length>2000)candles.shift()}
+  k.c=price;k.h=Math.max(k.h,price);k.l=Math.min(k.l,price);k.v++;window.dispatchEvent(new CustomEvent('chart:price',{detail:{price:price}}));
+}
+// seed 180 historical minutes
+(function(){var start=vt-180*60000,save=vt;for(var m=0;m<180;m++){vt=start+m*60000;for(var i=0;i<24;i++)tick()}vt=save})();
+function fmt(n){return n.toFixed(2)}
+function hhmm(t){var d=new Date(t);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')}
+function css(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+var W=0,H=0;
+function resize(){var r=wrap.getBoundingClientRect(),d=window.devicePixelRatio||1;W=r.width;H=r.height;cv.width=W*d;cv.height=H*d;ctx.setTransform(d,0,0,d,0,0);draw()}
+function sma(i,n){if(i<n-1)return null;var s=0;for(var j=i-n+1;j<=i;j++)s+=candles[j].c;return s/n}
+var geo={};
+function draw(){
+  var up=css('--up'),dn=css('--dn'),gr=css('--grid'),mut=css('--mut'),gold=css('--gold');
+  ctx.clearRect(0,0,W,H);
+  var axW=62,axH=24,pw=W-axW,ph=H-axH,volH=showVol?ph*0.16:0,cy=ph-volH;
+  var n=Math.max(5,Math.floor(pw/cw)),end=candles.length-offset,start=Math.max(0,end-n);
+  var vis=candles.slice(start,end);if(!vis.length)return;
+  var hi=-1e9,lo=1e9,vmax=1;
+  vis.forEach(function(k){hi=Math.max(hi,k.h);lo=Math.min(lo,k.l);vmax=Math.max(vmax,k.v)});
+  var pad=(hi-lo)*0.08||0.5;hi+=pad;lo-=pad;
+  var Y=function(p){return 8+(hi-p)/(hi-lo)*(cy-16)};
+  geo={start:start,n:n,pw:pw,Y:Y};
+  ctx.font='11px "JetBrains Mono",monospace';ctx.textBaseline='middle';
+  // grid + price axis
+  var step=niceStep((hi-lo)/6);
+  for(var p=Math.ceil(lo/step)*step;p<hi;p+=step){var y=Y(p);ctx.strokeStyle=gr;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(pw,y);ctx.stroke();ctx.fillStyle=mut;ctx.textAlign='left';ctx.fillText(fmt(p),pw+6,y)}
+  // time axis
+  ctx.textAlign='center';ctx.textBaseline='top';
+  var every=Math.max(1,Math.round(80/cw/5)*5);
+  vis.forEach(function(k,i){var gi=start+i;if(new Date(k.t).getMinutes()%every===0){var x=i*cw+cw/2;ctx.strokeStyle=gr;ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,ph);ctx.stroke();ctx.fillStyle=mut;ctx.fillText(hhmm(k.t),x,ph+6)}});
+  // volume
+  if(showVol)vis.forEach(function(k,i){var h=k.v/vmax*volH*0.9;ctx.globalAlpha=.35;ctx.fillStyle=k.c>=k.o?up:dn;ctx.fillRect(i*cw+1,ph-h,Math.max(1,cw-2),h);ctx.globalAlpha=1});
+  // candles
+  var bw=Math.max(1,cw*0.7);
+  vis.forEach(function(k,i){
+    var x=i*cw+cw/2,col=k.c>=k.o?up:dn;
+    ctx.strokeStyle=col;ctx.fillStyle=col;ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(Math.round(x)+.5,Y(k.h));ctx.lineTo(Math.round(x)+.5,Y(k.l));ctx.stroke();
+    var t=Y(Math.max(k.o,k.c)),b=Y(Math.min(k.o,k.c));
+    ctx.fillRect(x-bw/2,t,bw,Math.max(1,b-t));
+  });
+  // SMA
+  if(showSMA){ctx.strokeStyle=gold;ctx.lineWidth=1.6;ctx.beginPath();var f=true;
+    vis.forEach(function(k,i){var s=sma(start+i,20);if(s==null)return;var x=i*cw+cw/2,y=Y(s);f?ctx.moveTo(x,y):ctx.lineTo(x,y);f=false});ctx.stroke()}
+  // last price line
+  var last=candles[candles.length-1];
+  if(offset===0||true){var ly=Y(last.c);if(ly>0&&ly<cy){ctx.setLineDash([4,4]);ctx.strokeStyle=last.c>=last.o?up:dn;ctx.beginPath();ctx.moveTo(0,ly);ctx.lineTo(pw,ly);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle=last.c>=last.o?up:dn;ctx.fillRect(pw,ly-9,axW,18);ctx.fillStyle='#fff';ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillText(fmt(last.c),pw+6,ly)}}
+  // crosshair
+  if(hover){var hx=hover.x,hy=hover.y;if(hx<pw&&hy<ph){ctx.setLineDash([3,3]);ctx.strokeStyle=mut;ctx.beginPath();ctx.moveTo(hx,0);ctx.lineTo(hx,ph);ctx.moveTo(0,hy);ctx.lineTo(pw,hy);ctx.stroke();ctx.setLineDash([]);
+    var pv=hi-(hy-8)/(cy-16)*(hi-lo);ctx.fillStyle=gold;ctx.fillRect(pw,hy-9,axW,18);ctx.fillStyle='#fff';ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillText(fmt(pv),pw+6,hy)}}
+}
+function niceStep(r){var p=Math.pow(10,Math.floor(Math.log10(r))),m=r/p;return (m<1.5?1:m<3.5?2:m<7.5?5:10)*p}
+function panel(){
+  var k=candles[candles.length-1],lbl='Current candle';
+  if(hover&&geo.pw&&hover.x<geo.pw){var i=geo.start+Math.floor(hover.x/cw);if(candles[i]){k=candles[i];lbl='Candle'}}
+  $('hl').textContent=lbl;$('ts').textContent=hhmm(k.t);
+  $('o').textContent=fmt(k.o);$('h').textContent=fmt(k.h);$('l').textContent=fmt(k.l);$('c').textContent=fmt(k.c);$('v').textContent=k.v;
+  var last=candles[candles.length-1],first=candles[0],d=last.c-first.o,pc=d/first.o*100;
+  $('px').textContent=fmt(last.c);$('px').className='price mono '+(last.c>=last.o?'up':'dn');
+  $('chg').textContent=(d>=0?'+':'')+fmt(d)+' ('+(d>=0?'+':'')+pc.toFixed(2)+'%) over '+candles.length+' min';
+  $('chg').className='mono '+(d>=0?'up':'dn');
+}
+// loop
+var lastT=performance.now();
+function loop(now){
+  var dt=now-lastT;lastT=now;
+  if(!paused){
+    var per=Math.max(1,Math.round(dt/250*4)); // ~4 ticks/second baseline
+    var steps=Math.max(1,Math.round(dt/250));
+    vt+=dt*speed;
+    if(Math.random()<dt/250*Math.min(speed,4)||speed>1){for(var i=0;i<Math.max(1,Math.min(speed/4,10))*steps;i++)tick()}
+    draw();panel();
+  }
+  requestAnimationFrame(loop);
+}
+// interaction
+function pos(e){var r=cv.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top}}
+cv.addEventListener('pointermove',function(e){var p=pos(e);if(drag){var di=Math.round((p.x-drag.x)/cw);offset=Math.max(0,Math.min(candles.length-5,drag.o+di))}hover=p;draw();panel()});
+cv.addEventListener('pointerdown',function(e){var p=pos(e);drag={x:p.x,o:offset};cv.setPointerCapture(e.pointerId)});
+cv.addEventListener('pointerup',function(){drag=null});
+cv.addEventListener('pointerleave',function(){hover=null;drag=null;draw();panel()});
+cv.addEventListener('wheel',function(e){e.preventDefault();cw=Math.max(3,Math.min(32,cw*(e.deltaY<0?1.12:0.89)));draw()},{passive:false});
+document.querySelectorAll('[data-sp]').forEach(function(b){b.onclick=function(){speed=+b.dataset.sp;document.querySelectorAll('[data-sp]').forEach(function(x){x.classList.toggle('active',x===b)})}});
+$('pause').onclick=function(){paused=!paused;this.textContent=paused?'Resume':'Pause';$('stxt').textContent=paused?'Paused':'Running';$('status').classList.toggle('paused',paused);lastT=performance.now()};
+$('sma').onclick=function(){showSMA=!showSMA;this.classList.toggle('active',showSMA);draw()};
+$('vol').classList.add('active');
+$('vol').onclick=function(){showVol=!showVol;this.classList.toggle('active',showVol);draw()};
+$('theme').onchange=function(){var v=this.value;var h=document.documentElement;if(v==='auto'){h.removeAttribute('data-theme');h.removeAttribute('data-bs-theme')}else{h.setAttribute('data-theme',v);h.setAttribute('data-bs-theme',v)}draw()};
+window.addEventListener('resize',resize);
+resize();panel();requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
+
+
+
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Purchase Popup</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="style1.css">
+</head>
+<body>
+  <main class="container py-5">
+    <h1 class="display-6 fw-bold"></h1>
+    <p class="lead text-secondary"></p>
+    <div class="d-flex gap-2 flex-wrap">
+      <button id="toggleBtn" class="btn btn-dark">Pause popups</button>
+      <button id="nowBtn" class="btn btn-outline-dark">Show popups</button>
+    </div>
+  </main>
+
+  <div id="popupHost" class="popup-host" aria-live="polite"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="app1.js"></script>
+</body>
+</html>
+
+
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XAU/USD Buy / Sell Panel</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* Everything is scoped to #tp-root so it can be dropped into any page without side effects */
+#tp-root{--tp-up:#14877b;--tp-dn:#cf4a38;--tp-gold:#b8860b;font-family:Manrope,system-ui,sans-serif;font-size:14px;max-width:440px;margin:0 auto}
+#tp-root[data-bs-theme="dark"]{--tp-up:#3fb6a8;--tp-dn:#e5604d;--tp-gold:#e0b04a}
+#tp-root .mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+#tp-root .tp-up{color:var(--tp-up)}#tp-root .tp-dn{color:var(--tp-dn)}
+#tp-root .tp-side{border:0;color:#fff;padding:12px 8px;border-radius:6px;line-height:1.2;transition:filter .15s}
+#tp-root .tp-side:hover{filter:brightness(1.1);color:#fff}
+#tp-root .tp-side:active{transform:translateY(1px)}
+#tp-root .tp-sell{background:var(--tp-dn)}#tp-root .tp-buy{background:var(--tp-up)}
+#tp-root .tp-side small{display:block;font-weight:600;font-size:12px;opacity:.9}
+#tp-root .tp-side b{display:block;font-size:22px;font-weight:600}
+#tp-root .tp-spread{width:54px;text-align:center;align-self:center;color:var(--bs-secondary-color);font-size:12px}
+#tp-root .form-control:focus,#tp-root .btn:focus-visible{box-shadow:0 0 0 .2rem color-mix(in srgb,var(--tp-gold) 40%,transparent);border-color:var(--tp-gold)}
+#tp-root .tp-stat{display:flex;justify-content:space-between;padding:4px 0}
+#tp-root .tp-empty{padding:18px 0;text-align:center;color:var(--bs-secondary-color)}
+#tp-root table{margin:0}
+#tp-root th{font-weight:600;color:var(--bs-secondary-color);font-size:12px;white-space:nowrap}
+body{padding:20px 12px}
+</style>
+</head>
+<body>
+
+<div id="tp-root">
+  <div class="card shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <strong>XAU/USD</strong>
+      <span class="small text-secondary" id="tp-src">Demo price</span>
+    </div>
+    <div class="card-body">
+      <div class="d-flex gap-2 mb-3">
+        <button type="button" class="btn tp-side tp-sell flex-fill" id="tp-sell"><small>Sell</small><b class="mono" id="tp-bid">0.00</b></button>
+        <div class="tp-spread mono" id="tp-spread">0.30</div>
+        <button type="button" class="btn tp-side tp-buy flex-fill" id="tp-buy"><small>Buy</small><b class="mono" id="tp-ask">0.00</b></button>
+      </div>
+
+      <div class="row g-2 mb-2">
+        <div class="col-12">
+          <label class="form-label small mb-1" for="tp-lots">Lot size</label>
+          <div class="input-group">
+            <button class="btn btn-outline-secondary" type="button" id="tp-minus" aria-label="Decrease lot size">&minus;</button>
+            <input type="number" class="form-control text-center mono" id="tp-lots" value="0.10" min="0.01" max="50" step="0.01">
+            <button class="btn btn-outline-secondary" type="button" id="tp-plus" aria-label="Increase lot size">+</button>
+          </div>
+        </div>
+        <div class="col-6">
+          <label class="form-label small mb-1" for="tp-sl">Stop loss</label>
+          <input type="number" class="form-control mono" id="tp-sl" placeholder="Optional" step="0.01">
+        </div>
+        <div class="col-6">
+          <label class="form-label small mb-1" for="tp-tp">Take profit</label>
+          <input type="number" class="form-control mono" id="tp-tp" placeholder="Optional" step="0.01">
+        </div>
+      </div>
+      <div class="alert alert-warning py-2 small d-none mb-0" id="tp-msg" role="alert"></div>
+    </div>
+
+    <div class="card-body border-top pt-2">
+      <div class="tp-stat"><span class="text-secondary">Balance</span><span class="mono" id="tp-bal">10,000.00</span></div>
+      <div class="tp-stat"><span class="text-secondary">Floating P/L</span><span class="mono" id="tp-fl">0.00</span></div>
+      <div class="tp-stat"><strong>Equity</strong><strong class="mono" id="tp-eq">10,000.00</strong></div>
+    </div>
+
+    <div class="card-footer p-0">
+      <div class="d-flex justify-content-between align-items-center px-3 py-2">
+        <strong>Open positions <span class="badge text-bg-secondary" id="tp-count">0</span></strong>
+        <button class="btn btn-sm btn-outline-secondary" id="tp-closeall" type="button">Close all</button>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead><tr><th class="ps-3">Side</th><th>Lots</th><th>Entry</th><th>P/L</th><th></th></tr></thead>
+          <tbody id="tp-rows"></tbody>
+        </table>
+      </div>
+      <div class="tp-empty" id="tp-empty">No open positions. Tap Buy or Sell to open one.</div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+/*
+  TradePanel: isolated buy/sell widget.
+  Feed it prices:   window.dispatchEvent(new CustomEvent('chart:price', {detail:{price: 4051.25}}));
+              or:   TradePanel.setPrice(4051.25);
+  Listen for fills: window.addEventListener('tradepanel:order', e => console.log(e.detail));
+                    window.addEventListener('tradepanel:close', e => console.log(e.detail));
+*/
+window.TradePanel=(function(){
+  var CONTRACT=100;          // ounces per 1.00 lot
+  var SPREAD=0.30;           // price units between sell and buy
+  var root=document.getElementById('tp-root');
+  var $=function(id){return document.getElementById(id)};
+  var balance=10000,positions=[],nextId=1,mid=4050,externalAt=0;
+
+  // follow the page's light/dark preference
+  var mq=window.matchMedia('(prefers-color-scheme: dark)');
+  function theme(){root.setAttribute('data-bs-theme',mq.matches?'dark':'light');document.documentElement.setAttribute('data-bs-theme',mq.matches?'dark':'light')}
+  theme();if(mq.addEventListener)mq.addEventListener('change',theme);
+
+  function bid(){return mid-SPREAD/2}
+  function ask(){return mid+SPREAD/2}
+  function f(n){return n.toFixed(2)}
+  function money(n){return n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}
+  function pl(p){return (p.side==='buy'?bid()-p.entry:p.entry-ask())*p.lots*CONTRACT}
+
+  function msg(t){var m=$('tp-msg');if(!t){m.classList.add('d-none');return}m.textContent=t;m.classList.remove('d-none')}
+  function emit(name,detail){window.dispatchEvent(new CustomEvent(name,{detail:detail}))}
+
+  function open(side){
+    msg('');
+    var lots=parseFloat($('tp-lots').value),sl=parseFloat($('tp-sl').value),tp=parseFloat($('tp-tp').value);
+    if(!(lots>=0.01&&lots<=50)){msg('Enter a lot size between 0.01 and 50.');return}
+    var entry=side==='buy'?ask():bid();
+    if(!isNaN(sl)&&(side==='buy'?sl>=entry:sl<=entry)){msg('Stop loss must be '+(side==='buy'?'below':'above')+' the entry price '+f(entry)+'.');return}
+    if(!isNaN(tp)&&(side==='buy'?tp<=entry:tp>=entry)){msg('Take profit must be '+(side==='buy'?'above':'below')+' the entry price '+f(entry)+'.');return}
+    var p={id:nextId++,side:side,lots:lots,entry:entry,sl:isNaN(sl)?null:sl,tp:isNaN(tp)?null:tp,time:Date.now()};
+    positions.push(p);
+    emit('tradepanel:order',{id:p.id,side:side,lots:lots,price:entry,sl:p.sl,tp:p.tp,time:p.time});
+    render();
+  }
+  function close(id,reason){
+    var i=positions.findIndex(function(p){return p.id===id});if(i<0)return;
+    var p=positions.splice(i,1)[0],profit=pl(p);balance+=profit;
+    emit('tradepanel:close',{id:p.id,side:p.side,lots:p.lots,entry:p.entry,exit:p.side==='buy'?bid():ask(),profit:profit,reason:reason||'manual',time:Date.now()});
+    render();
+  }
+  function checkLevels(){
+    positions.slice().forEach(function(p){
+      if(p.side==='buy'){if(p.sl!=null&&bid()<=p.sl)close(p.id,'stop loss');else if(p.tp!=null&&bid()>=p.tp)close(p.id,'take profit')}
+      else{if(p.sl!=null&&ask()>=p.sl)close(p.id,'stop loss');else if(p.tp!=null&&ask()<=p.tp)close(p.id,'take profit')}
+    });
+  }
+  function setPrice(p){
+    if(typeof p!=='number'||!isFinite(p))return;
+    mid=p;checkLevels();render();
+  }
+  function render(){
+    $('tp-bid').textContent=f(bid());$('tp-ask').textContent=f(ask());$('tp-spread').textContent=f(SPREAD);
+    var fl=0;positions.forEach(function(p){fl+=pl(p)});
+    $('tp-bal').textContent=money(balance);
+    $('tp-fl').textContent=(fl>=0?'+':'')+money(fl);$('tp-fl').className='mono '+(fl>=0?'tp-up':'tp-dn');
+    $('tp-eq').textContent=money(balance+fl);
+    $('tp-count').textContent=positions.length;
+    $('tp-empty').classList.toggle('d-none',positions.length>0);
+    $('tp-closeall').disabled=!positions.length;
+    $('tp-rows').innerHTML=positions.map(function(p){
+      var v=pl(p);
+      return '<tr><td class="ps-3 fw-semibold '+(p.side==='buy'?'tp-up':'tp-dn')+'">'+(p.side==='buy'?'Buy':'Sell')+'</td>'+
+        '<td class="mono">'+p.lots.toFixed(2)+'</td><td class="mono">'+f(p.entry)+'</td>'+
+        '<td class="mono '+(v>=0?'tp-up':'tp-dn')+'">'+(v>=0?'+':'')+f(v)+'</td>'+
+        '<td class="text-end pe-3"><button class="btn btn-sm btn-outline-secondary" data-close="'+p.id+'" aria-label="Close position '+p.id+'">Close</button></td></tr>';
+    }).join('');
+  }
+
+  // events
+  $('tp-sell').onclick=function(){open('sell')};
+  $('tp-buy').onclick=function(){open('buy')};
+  $('tp-closeall').onclick=function(){positions.slice().forEach(function(p){close(p.id,'close all')})};
+  $('tp-rows').addEventListener('click',function(e){var b=e.target.closest('[data-close]');if(b)close(+b.dataset.close)});
+  function step(d){var v=parseFloat($('tp-lots').value)||0.1;v=Math.min(50,Math.max(0.01,Math.round((v+d)*100)/100));$('tp-lots').value=v.toFixed(2)}
+  $('tp-minus').onclick=function(){step(-0.01)};$('tp-plus').onclick=function(){step(0.01)};
+  window.addEventListener('chart:price',function(e){externalAt=Date.now();$('tp-src').textContent='Chart price';if(e.detail)setPrice(e.detail.price)});
+
+  // demo feed, used only when no chart is sending prices
+  setInterval(function(){
+    if(Date.now()-externalAt<3000)return;
+    var u=Math.random()||1e-9,v=Math.random();
+    setPrice(mid+Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)*0.35);
+  },500);
+
+  render();
+  return {setPrice:setPrice,getPositions:function(){return positions.slice()}};
+})();
+</script>
+</body>
+</html>
+
+
